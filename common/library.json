@@ -1,0 +1,12 @@
+{
+  "name": "tvcnet-common",
+  "version": "0.1.0",
+  "description": "Shared logic of TVCnet, the TVC tape-port WiFi module: frames, line code, modem",
+  "license": "GPL-3.0-or-later",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}

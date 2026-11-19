@@ -1,0 +1,11 @@
+# Builds
+build/
+.pio/
+managed_components/
+sdkconfig.old
+dependencies.lock
+
+# Editors
+.vscode/
+.idea/
+*.swp
