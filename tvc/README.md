@@ -9,6 +9,7 @@ Z80 programok a TVC-re, [sjasmplus](https://github.com/z00m128/sjasmplus)-szal f
 | `ping.asm` | `PING` és `ECHO`; a napló: minden válasz állapota, hossza és adata |
 | `get.asm` | `GET` egy URL-re, aztán `NEXT` a végéig; a napló a letöltött tartalom, az utolsó állapot 6FF4h-n |
 | `tcp.asm` | `OPEN` egy echo szerverre, `SEND`, `NEXT`, amíg minden vissza nem jött, `CLOSE`; az állapotok 6FF8h-tól, a napló a visszakapott adat |
+| `basic/` | TVC BASIC példák (`PING`, `WIFI`, `GET`, `TERM`) listaként és CAS fájlként, egy kis gépi kódú segédrutinnal; leírás: [basic/README.md](basic/README.md) |
 | `hayes.asm` | egy Hayes munkamenet `TERM`-mel, egy forgatókönyv alapján (`ATE0`, `ATI4`, `ATDT`, `+++`, `ATO`, `ATH`, `AT&G`, egy elutasított kapcsolat, `ATV0`); a napló minden, amit a TVCnet kiírt |
 
 - Fordítás: `sjasmplus --sym=ping.sym ping.asm`; a kimenet `ping.bin`, a betöltési cím 5000h.

@@ -95,6 +95,6 @@ A `TERM` egy lekérdezett soros vonal egy Hayes modemhez: a DATA-ban az megy, am
 
 ## TVC programok
 
-A `tvc/` mappában sjasmplus-szal fordítható TVC oldali példák és tesztek vannak, a `tvcnet.inc` rutinjaival (`tn_cmd`: egy kérés és a válasza, ismétléssel): `ping`, `get`, `tcp`, `hayes`. Leírás: [tvc/README.md](tvc/README.md).
+A `tvc/` mappában sjasmplus-szal fordítható TVC oldali példák és tesztek vannak, a `tvcnet.inc` rutinjaival (`tn_cmd`: egy kérés és a válasza, ismétléssel): `ping`, `get`, `tcp`, `hayes`. Leírás: [tvc/README.md](tvc/README.md). TVC BASIC példák (`PING`, `WIFI`, `GET`, `TERM`, CAS fájlként is): [tvc/basic/README.md](tvc/basic/README.md).
 
 40h-tól felfelé minden hiba.

@@ -13,7 +13,7 @@ A protokoll leírása: [PROTOKOLL.md](PROTOKOLL.md), a hardveré és a bekötés
 | `common/` | hardverfüggetlen C++17: keret, vonali kód, parancs- és állapotkódok, a modem (váltakozó bit, parancsok, `NEXT`), a Hayes modem (`TERM`), a HAL felület. Ugyanez a kód fordul a freeTVC emulátorba is, ezért Arduino és ESP-IDF fejléc nem lehet benne. |
 | `esp32s3/` | Az ESP hardverfüggő kódrészei. PlatformIO projekt. |
 | `tests/` | a `common/` host tesztjei hamis hálózattal |
-| `tvc/` | TVC oldali programok (sjasmplus): a kérés-válasz rutinok és tesztek |
+| `tvc/` | TVC oldali programok (sjasmplus): a kérés-válasz rutinok és tesztek; `tvc/basic/`: BASIC példák |
 
 A `common/` és a gazda közötti határ: `common/include/tvcnet/hal.hpp`.
 

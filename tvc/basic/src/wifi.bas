@@ -1,0 +1,16 @@
+10 PRINT "TVCnet: WiFi beallitasa":DIM N$*32,J$*64
+20 PRINT "Halozat neve";:INPUT N$
+30 PRINT "Jelszo";:INPUT J$
+40 C=4:D$=N$&","&J$:GOSUB 8000
+50 IF Z THEN PRINT "Hiba:";Z:END
+60 PRINT "Mentve, csatlakozas";
+70 FOR K=1 TO 30
+80 C=3:D$="":GOSUB 8000
+90 IF PEEK(W+2)=1 THEN 130
+100 PRINT ".";:FOR T=1 TO 300:NEXT T
+110 NEXT K
+120 PRINT:PRINT "Nem sikerult csatlakozni.":END
+130 PRINT:PRINT "Csatlakozva, IP: ";
+140 FOR K=3 TO 6:N=PEEK(W+K):GOSUB 8200:IF K<6 THEN PRINT ".";
+150 NEXT K:PRINT
+160 END
