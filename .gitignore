@@ -9,3 +9,7 @@ dependencies.lock
 .vscode/
 .idea/
 *.swp
+
+# TVC programs
+tvc/*.bin
+tvc/*.sym

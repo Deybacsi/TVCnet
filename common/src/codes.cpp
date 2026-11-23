@@ -14,6 +14,7 @@ const char* command_name(std::uint8_t code) {
     case cmd::kClose: return "CLOSE";
     case cmd::kOpen: return "OPEN";
     case cmd::kSend: return "SEND";
+    case cmd::kTerm: return "TERM";
     default: return "?";
     }
 }

@@ -7,7 +7,7 @@
 
 namespace tvcnet {
 
-inline constexpr std::uint8_t kProtocolVersion = 1;
+inline constexpr std::uint8_t kProtocolVersion = 2;
 
 inline constexpr std::uint8_t kSyncFromTvc = 0xA5;
 inline constexpr std::uint8_t kSyncToTvc = 0x6A;
@@ -26,6 +26,7 @@ inline constexpr std::uint8_t kNext = 0x11;
 inline constexpr std::uint8_t kClose = 0x12;
 inline constexpr std::uint8_t kOpen = 0x20;
 inline constexpr std::uint8_t kSend = 0x21;
+inline constexpr std::uint8_t kTerm = 0x30;
 }  // namespace cmd
 
 namespace status {

@@ -20,7 +20,7 @@ public:
     virtual bool sending() const = 0;
 };
 
-// WiFi and the one network job (an HTTP GET; later a TCP connection). Calls come from the modem and must not block.
+// WiFi and the one network job (an HTTP GET or a TCP connection). Calls come from the modem and must not block.
 class Network {
 public:
     virtual ~Network() = default;
@@ -31,11 +31,17 @@ public:
     virtual bool wifi_join(std::string_view ssid, std::string_view password) = 0;
     // Starts a GET of `url` (http:// or https://), closing any earlier job; status::kOk or an error code.
     virtual std::uint8_t http_get(std::string_view url) = 0;
+    // Starts a TCP connection to host:port, closing any earlier job; status::kOk or an error code.
+    virtual std::uint8_t tcp_open(std::string_view host, std::uint16_t port) = 0;
+    // Queues bytes for the TCP connection, also while it is still connecting; status::kOk, kNone (no TCP job),
+    // kBusy (the send queue is full) or an error code.
+    virtual std::uint8_t tcp_send(const std::uint8_t* data, std::size_t size) = 0;
     // Moves up to `max` bytes of the job's data into `out` (cleared first). status::kNone (no job), kBusy (no data
     // yet), kData (more may follow), kEnd (these are the last) or an error code; `detail` is the HTTP status for
     // kErrHttp.
     virtual std::uint8_t next(std::vector<std::uint8_t>& out, std::size_t max, std::uint16_t& detail) = 0;
-    // status::kNone, kBusy, kData (data is waiting), kEnd (finished, nothing left) or an error code
+    // status::kNone, kBusy (running or connecting), kOk (TCP connected, nothing waiting), kData (data is waiting),
+    // kEnd (finished or closed by the peer, nothing left) or an error code
     virtual std::uint8_t job_state() const = 0;
     // The job's whole length when the server told it, else -1
     virtual std::int64_t content_length() const = 0;

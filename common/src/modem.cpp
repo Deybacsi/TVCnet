@@ -20,7 +20,7 @@ void put_le(std::vector<std::uint8_t>& out, std::uint64_t value, unsigned bytes)
 }  // namespace
 
 Modem::Modem(LineOut& out, Network* net, const ModemConfig& config, Log* log)
-    : out_(out), net_(net), config_(config), log_(log) {}
+    : out_(out), net_(net), config_(config), log_(log), hayes_(net) {}
 
 void Modem::reset() {
     receiver_.reset();
@@ -28,6 +28,7 @@ void Modem::reset() {
     last_reply_.clear();
     pending_.clear();
     waiting_ = false;
+    hayes_.reset();
 }
 
 ModemStats Modem::stats() const {
@@ -52,7 +53,7 @@ void Modem::handle(std::uint64_t now_us) {
         ++stats_.requests;
         std::uint8_t status = status::kErrUnknown;
         std::vector<std::uint8_t> data;
-        execute(receiver_.ctrl() & kCodeMask, receiver_.data(), status, data);
+        execute(receiver_.ctrl() & kCodeMask, receiver_.data(), now_us, status, data);
         last_request_ = std::move(request);
         last_reply_.clear();
         build_frame(kSyncToTvc, static_cast<std::uint8_t>((receiver_.ctrl() & kToggleBit) | status), data.data(),
@@ -72,9 +73,10 @@ void Modem::poll(std::uint64_t) {
     }
 }
 
-void Modem::execute(std::uint8_t code, const std::vector<std::uint8_t>& data, std::uint8_t& status,
+void Modem::execute(std::uint8_t code, const std::vector<std::uint8_t>& data, std::uint64_t now_us, std::uint8_t& status,
                     std::vector<std::uint8_t>& reply) {
     status = status::kOk;
+    const std::string_view text(reinterpret_cast<const char*>(data.data()), data.size());
     switch (code) {
     case cmd::kPing:
         reply.push_back(kProtocolVersion);
@@ -93,7 +95,6 @@ void Modem::execute(std::uint8_t code, const std::vector<std::uint8_t>& data, st
         return;
     }
     case cmd::kWifi: {
-        const std::string_view text(reinterpret_cast<const char*>(data.data()), data.size());
         const std::size_t comma = text.find(',');
         if (comma == std::string_view::npos || comma == 0) {
             status = status::kErrParam;
@@ -110,8 +111,32 @@ void Modem::execute(std::uint8_t code, const std::vector<std::uint8_t>& data, st
         } else if (!net_) {
             status = status::kErrNoWifi;
         } else {
-            status = net_->http_get(std::string_view(reinterpret_cast<const char*>(data.data()), data.size()));
+            hayes_.drop();
+            status = net_->http_get(text);
         }
+        return;
+    case cmd::kOpen: {
+        std::string_view host;
+        std::uint16_t port = 0;
+        if (!parse_host_port(text, host, port)) {
+            status = status::kErrParam;
+        } else if (!net_) {
+            status = status::kErrNoWifi;
+        } else {
+            hayes_.drop();
+            status = net_->tcp_open(host, port);
+        }
+        return;
+    }
+    case cmd::kSend:
+        if (!net_) {
+            status = status::kNone;
+        } else if (!data.empty()) {
+            status = net_->tcp_send(data.data(), data.size());
+        }
+        return;
+    case cmd::kTerm:
+        status = hayes_.exchange(data.data(), data.size(), now_us, reply, kMaxData);
         return;
     case cmd::kNext: {
         if (!net_) {
@@ -131,6 +156,7 @@ void Modem::execute(std::uint8_t code, const std::vector<std::uint8_t>& data, st
         return;
     }
     case cmd::kClose:
+        hayes_.drop();
         if (net_) {
             net_->close();
         }

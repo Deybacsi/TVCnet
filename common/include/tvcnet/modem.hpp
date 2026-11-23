@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// TVCnet's logic above the physical layer: frames from the TVC, the alternating bit, the commands, the replies
-// as line-coded half-periods (PROTOKOLL.md). Event driven: the host feeds bytes and polls with its clock.
+// TVCnet's logic above the physical layer: frames from the TVC, the alternating bit, the commands (TERM through
+// the Hayes modem), the replies as line-coded half-periods (PROTOKOLL.md). Event driven: the host feeds bytes and polls with its clock.
 #pragma once
 
 #include <cstdint>
@@ -10,6 +10,7 @@
 #include "tvcnet/codes.hpp"
 #include "tvcnet/frame.hpp"
 #include "tvcnet/hal.hpp"
+#include "tvcnet/hayes.hpp"
 #include "tvcnet/line_code.hpp"
 
 namespace tvcnet {
@@ -38,7 +39,10 @@ public:
     // Forgets the half-received frame, the waiting reply and the stored one (power-on; a host clock restart).
     void reset();
 
-    void set_network(Network* net) { net_ = net; }
+    void set_network(Network* net) {
+        net_ = net;
+        hayes_.set_network(net);
+    }
     const ModemConfig& config() const { return config_; }
     void set_config(const ModemConfig& config) { config_ = config; }
     ModemStats stats() const;
@@ -48,7 +52,7 @@ public:
 
 private:
     void handle(std::uint64_t now_us);
-    void execute(std::uint8_t code, const std::vector<std::uint8_t>& data, std::uint8_t& status,
+    void execute(std::uint8_t code, const std::vector<std::uint8_t>& data, std::uint64_t now_us, std::uint8_t& status,
                  std::vector<std::uint8_t>& reply);
     void log_frame(const char* what, const std::vector<std::uint8_t>& frame, bool to_tvc);
 
@@ -56,6 +60,7 @@ private:
     Network* net_;
     ModemConfig config_;
     Log* log_;
+    Hayes hayes_;
     FrameReceiver receiver_{kSyncFromTvc};
     ModemStats stats_;
     std::vector<std::uint8_t> last_request_;  // SYNC to CHK

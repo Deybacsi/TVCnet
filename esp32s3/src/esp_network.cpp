@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "tvcnet/codes.hpp"
@@ -78,18 +79,68 @@ std::uint8_t EspNetwork::http_get(std::string_view url) {
     }
     {
         Lock lock(mutex_);
-        ++job_id_;
-        job_ = true;
-        started_ = false;
-        finished_ = false;
-        error_ = 0;
-        http_status_ = 0;
-        length_ = -1;
+        start_job(false);
         url_.assign(url);
-        buffer_.clear();
     }
     xTaskNotifyGive(task_);
     return st::kOk;
+}
+
+std::uint8_t EspNetwork::tcp_open(std::string_view host, std::uint16_t port) {
+    if (host.empty() || host.size() > 253) {
+        return st::kErrParam;
+    }
+    if (!wifi_connected()) {
+        return st::kErrNoWifi;
+    }
+    {
+        Lock lock(mutex_);
+        start_job(true);
+        host_.assign(host);
+        port_ = port;
+    }
+    xTaskNotifyGive(task_);
+    return st::kOk;
+}
+
+std::uint8_t EspNetwork::tcp_send(const std::uint8_t* data, std::size_t size) {
+    Lock lock(mutex_);
+    if (!job_ || !tcp_) {
+        return st::kNone;
+    }
+    if (error_) {
+        return error_;
+    }
+    if (finished_) {
+        return st::kErrLost;
+    }
+    if (send_.size() + size > kSendQueue) {
+        return st::kBusy;
+    }
+    send_.insert(send_.end(), data, data + size);
+    return st::kOk;
+}
+
+void EspNetwork::start_job(bool tcp) {
+    ++job_id_;
+    job_ = true;
+    tcp_ = tcp;
+    connected_ = false;
+    started_ = false;
+    finished_ = false;
+    error_ = 0;
+    http_status_ = 0;
+    length_ = -1;
+    buffer_.clear();
+    send_.clear();
+}
+
+void EspNetwork::fail(std::uint32_t id, std::uint8_t code, std::uint16_t http_status) {
+    Lock lock(mutex_);
+    if (current(id)) {
+        error_ = code;
+        http_status_ = http_status;
+    }
 }
 
 std::uint8_t EspNetwork::next(std::vector<std::uint8_t>& out, std::size_t max, std::uint16_t& detail) {
@@ -131,7 +182,10 @@ std::uint8_t EspNetwork::job_state() const {
     if (error_) {
         return error_;
     }
-    return finished_ ? st::kEnd : st::kBusy;
+    if (finished_) {
+        return st::kEnd;
+    }
+    return tcp_ && connected_ ? st::kOk : st::kBusy;
 }
 
 std::int64_t EspNetwork::content_length() const {
@@ -144,6 +198,7 @@ void EspNetwork::close() {
     ++job_id_;
     job_ = false;
     buffer_.clear();
+    send_.clear();
 }
 
 void EspNetwork::task_entry(void* self) { static_cast<EspNetwork*>(self)->task(); }
@@ -152,7 +207,9 @@ void EspNetwork::task() {
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         std::uint32_t id;
-        std::string url;
+        bool tcp;
+        std::string target;
+        std::uint16_t port;
         {
             Lock lock(mutex_);
             if (!job_ || started_) {
@@ -160,9 +217,15 @@ void EspNetwork::task() {
             }
             started_ = true;
             id = job_id_;
-            url = url_;
+            tcp = tcp_;
+            target = tcp ? host_ : url_;
+            port = port_;
         }
-        run_job(id, url);
+        if (tcp) {
+            run_tcp(id, target, port);
+        } else {
+            run_job(id, target);
+        }
     }
 }
 
@@ -180,25 +243,18 @@ void EspNetwork::run_job(std::uint32_t id, const std::string& url) {
     http.useHTTP10(true);  // no chunked transfer: the stream is the body
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setTimeout(15000);
-    auto fail = [&](std::uint8_t code, std::uint16_t status) {
-        Lock lock(mutex_);
-        if (current(id)) {
-            error_ = code;
-            http_status_ = status;
-        }
-    };
     if (!http.begin(*client, url.c_str())) {
-        fail(st::kErrParam, 0);
+        fail(id, st::kErrParam);
         return;
     }
     const int code = http.GET();
     if (code < 0) {
-        fail(code == HTTPC_ERROR_READ_TIMEOUT ? st::kErrLost : st::kErrConnect, 0);
+        fail(id, code == HTTPC_ERROR_READ_TIMEOUT ? st::kErrLost : st::kErrConnect);
         http.end();
         return;
     }
     if (code >= 400) {
-        fail(st::kErrHttp, static_cast<std::uint16_t>(code));
+        fail(id, st::kErrHttp, static_cast<std::uint16_t>(code));
         http.end();
         return;
     }
@@ -230,7 +286,7 @@ void EspNetwork::run_job(std::uint32_t id, const std::string& url) {
                 break;
             }
             if (available <= 0 && (idle_ms += 10) > 15000) {
-                fail(st::kErrLost, 0);
+                fail(id, st::kErrLost);
                 http.end();
                 return;
             }
@@ -256,11 +312,74 @@ void EspNetwork::run_job(std::uint32_t id, const std::string& url) {
     }
     http.end();
     if (left > 0) {
-        fail(st::kErrLost, 0);
+        fail(id, st::kErrLost);
         return;
     }
     Lock lock(mutex_);
     if (current(id)) {
         finished_ = true;
+    }
+}
+
+void EspNetwork::run_tcp(std::uint32_t id, const std::string& host, std::uint16_t port) {
+    IPAddress address;
+    if (!WiFi.hostByName(host.c_str(), address)) {
+        fail(id, st::kErrDns);
+        return;
+    }
+    NetworkClient client;
+    if (!client.connect(address, port, 10000)) {
+        fail(id, st::kErrConnect);
+        return;
+    }
+    client.setNoDelay(true);
+    std::uint8_t chunk[512];
+    for (bool first = true;; first = false) {
+        std::size_t out = 0;
+        std::size_t room;
+        {
+            Lock lock(mutex_);
+            if (!current(id)) {
+                client.stop();
+                return;
+            }
+            if (first) {
+                connected_ = true;
+            }
+            room = std::min(kBuffer - buffer_.size(), sizeof chunk);
+            out = std::min(send_.size(), sizeof chunk);
+            std::copy(send_.begin(), send_.begin() + static_cast<long>(out), chunk);
+            send_.erase(send_.begin(), send_.begin() + static_cast<long>(out));
+        }
+        bool idle = true;
+        if (out > 0) {
+            if (client.write(chunk, out) != out) {
+                fail(id, st::kErrLost);
+                client.stop();
+                return;
+            }
+            idle = false;
+        }
+        const int available = client.available();
+        if (available > 0 && room > 0) {
+            const int got = client.read(chunk, std::min<std::size_t>(room, static_cast<std::size_t>(available)));
+            if (got > 0) {
+                Lock lock(mutex_);
+                if (current(id)) {
+                    buffer_.insert(buffer_.end(), chunk, chunk + got);
+                }
+                idle = false;
+            }
+        } else if (available <= 0 && !client.connected()) {
+            client.stop();
+            Lock lock(mutex_);
+            if (current(id)) {
+                finished_ = true;
+            }
+            return;
+        }
+        if (idle) {
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
     }
 }

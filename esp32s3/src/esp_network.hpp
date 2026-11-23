@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// WiFi and the one HTTP(S) job on the ESP32-S3. The job runs in its own FreeRTOS task, so the modem never blocks;
-// it reads only as much as the buffer holds, the TVC's NEXT requests empty it.
+// WiFi and the one network job (HTTP(S) GET or TCP) on the ESP32-S3. The job runs in its own FreeRTOS task, so the
+// modem never blocks; it reads only as much as the buffer holds, the TVC's NEXT and TERM requests empty it.
 #pragma once
 
 #include <Arduino.h>
@@ -16,6 +16,7 @@
 class EspNetwork final : public tvcnet::Network {
 public:
     static constexpr std::size_t kBuffer = 32 * 1024;
+    static constexpr std::size_t kSendQueue = 4096;
 
     // Joins the stored network, if any, and starts the job task.
     void begin();
@@ -24,6 +25,8 @@ public:
     std::array<std::uint8_t, 4> ip() const override;
     bool wifi_join(std::string_view ssid, std::string_view password) override;
     std::uint8_t http_get(std::string_view url) override;
+    std::uint8_t tcp_open(std::string_view host, std::uint16_t port) override;
+    std::uint8_t tcp_send(const std::uint8_t* data, std::size_t size) override;
     std::uint8_t next(std::vector<std::uint8_t>& out, std::size_t max, std::uint16_t& detail) override;
     std::uint8_t job_state() const override;
     std::int64_t content_length() const override;
@@ -32,7 +35,11 @@ public:
 private:
     static void task_entry(void* self);
     void task();
+    // Guarded by mutex_: a new job replaces the old one, which its task run notices by the id
+    void start_job(bool tcp);
     void run_job(std::uint32_t id, const std::string& url);
+    void run_tcp(std::uint32_t id, const std::string& host, std::uint16_t port);
+    void fail(std::uint32_t id, std::uint8_t code, std::uint16_t http_status = 0);
     bool current(std::uint32_t id) const { return id == job_id_; }
 
     mutable SemaphoreHandle_t mutex_ = nullptr;
@@ -40,11 +47,16 @@ private:
     // Guarded by mutex_
     std::uint32_t job_id_ = 0;
     bool job_ = false;
+    bool tcp_ = false;
+    bool connected_ = false; // TCP: the connection is up
     bool started_ = false;   // the task took the job
     bool finished_ = false;
     std::uint8_t error_ = 0;
     std::uint16_t http_status_ = 0;
     std::int64_t length_ = -1;
     std::string url_;
+    std::string host_;
+    std::uint16_t port_ = 0;
     std::deque<std::uint8_t> buffer_;
+    std::deque<std::uint8_t> send_;
 };

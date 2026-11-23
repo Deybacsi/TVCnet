@@ -1,7 +1,7 @@
 {
   "name": "tvcnet-common",
-  "version": "0.1.0",
-  "description": "Shared logic of TVCnet, the TVC tape-port WiFi module: frames, line code, modem",
+  "version": "0.2.0",
+  "description": "Shared logic of TVCnet, the TVC tape-port WiFi module: frames, line code, modem, Hayes modem",
   "license": "GPL-3.0-or-later",
   "frameworks": "*",
   "platforms": "*",

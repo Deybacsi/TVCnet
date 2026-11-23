@@ -6,6 +6,7 @@ project(tvcnet LANGUAGES CXX)
 add_library(tvcnet_common STATIC
     common/src/codes.cpp
     common/src/frame.cpp
+    common/src/hayes.cpp
     common/src/line_code.cpp
     common/src/modem.cpp)
 target_include_directories(tvcnet_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/common/include)
